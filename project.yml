@@ -1,0 +1,12 @@
+packages:
+  - name: olkyl
+    actions:
+      - name: getStatus
+        limits:
+          timeout: 5000
+          memory: 256
+environment:
+  SLACK_TOKEN: ${SLACK_TOKEN}
+  SHELLY_URL: ${SHELLY_URL}
+  DEVICE_ID: ${DEVICE_ID}
+  SHELLY_KEY: ${SHELLY_KEY}

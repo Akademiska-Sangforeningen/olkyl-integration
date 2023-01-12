@@ -1,0 +1,19 @@
+[
+  {
+    "apihost": "https://faas-ams3-2a2df116.doserverless.co",
+    "namespace": "fn-06540306-7b25-4205-b5ab-ef23f41803c8",
+    "packageVersions": {
+      "olkyl": {
+        "version": "0.0.130",
+        "digest": "65629858309ae0cab2f43dff7295b80bb279e3923c6879cfe0d4a7502e4a40fc"
+      }
+    },
+    "actionVersions": {
+      "olkyl/getStatus": {
+        "version": "0.0.136",
+        "digest": "ef526cfe9cb615bea216d5b91ea8878590e4f7d67a18178665d1cf20a8063f1d"
+      }
+    },
+    "webHashes": {}
+  }
+]
