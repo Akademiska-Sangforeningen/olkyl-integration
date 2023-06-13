@@ -58,7 +58,6 @@ async function main(args) {
 
 
 const getStatusText = async () => {
-  const token = process.env["SLACK_TOKEN"];
   const shellyUrl = process.env["SHELLY_URL"];
   const shellyDeviceId = process.env["DEVICE_ID"];
   const shellyKey = process.env["SHELLY_KEY"];

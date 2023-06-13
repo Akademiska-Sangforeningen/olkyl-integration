@@ -5,6 +5,10 @@ packages:
         limits:
           timeout: 5000
           memory: 256
+      - name: delayedResponse
+        limits:
+          timeout: 5000
+          memory: 256
 environment:
   SLACK_TOKEN: ${SLACK_TOKEN}
   SHELLY_URL: ${SHELLY_URL}
