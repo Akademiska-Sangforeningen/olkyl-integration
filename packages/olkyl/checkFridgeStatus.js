@@ -66,17 +66,6 @@ async function main(args) {
             style: "danger",
             value: "av",
             action_id: "av"
-          },
-          {
-            type: "button",
-            text: {
-              type: "plain_text",
-              text: "Ignorera",
-              emoji: true
-            },
-            style: "primary",
-            value: "ignore",
-            action_id: "ignore"
           }
         ]
       }
