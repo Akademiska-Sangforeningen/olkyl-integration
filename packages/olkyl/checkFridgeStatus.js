@@ -1,77 +1,99 @@
-// The function's dependencies.
-const fetch = require("node-fetch");
+const { WebClient } = require('@slack/web-api');
+const fetch = require('node-fetch');
+const dotenv = require('dotenv');
 
-// Function starts here.
-async function main(args) {
-  // MongoDB client configuration.
-  const token = process.env["SLACK_TOKEN"];
-  const shellyUrl = process.env["SHELLY_URL"];
-  const shellyDeviceId = process.env["DEVICE_ID"];
-  const shellyKey = process.env["SHELLY_KEY"];
+// Load environment variables from .env file
+dotenv.config();
 
-  if (args.token !== token)
-    return { statusCode: 401, body: { text: "Invalid token" } };
-
-  if (args.text === "på" || args.text === "av") {
-    const controlUrl = `${shellyUrl}/device/relay/control`;
-    var details = {
-      channel: 0,
-      turn: args.text === "på" ? "on" : "off",
-      id: shellyDeviceId,
-      auth_key: shellyKey,
-    };
-
-    var formBodyParts = [];
-
-    for (var property in details) {
-      var encodedKey = encodeURIComponent(property);
-      var encodedValue = encodeURIComponent(details[property]);
-      formBodyParts.push(encodedKey + "=" + encodedValue);
-    }
-
-    const formBody = formBodyParts.join("&");
-
-    const status = await (
-      await fetch(controlUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-        },
-        body: formBody,
-      })
-    ).json();
-
-    if (status.isok) {
-      const text = await new Promise((resolve) => setTimeout(() => resolve(getStatusText()), 1000))
-      return { body: { text, response_type: "in_channel" } };
-    }
-    else return { body: { text: "misslyckades" } };
-  } else {
-    return {
-      body: {
-        text: await getStatusText(),
-        response_type: "in_channel",
-      },
-    };
-  }
+function formatDuration(seconds) {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  
+  const parts = [];
+  if (hours > 0) parts.push(`${hours} hour${hours === 1 ? '' : 's'}`);
+  if (minutes > 0) parts.push(`${minutes} minute${minutes === 1 ? '' : 's'}`);
+  
+  return parts.join(' and ') || 'less than a minute';
 }
 
 
-const getStatusText = async () => {
+async function main(args) {
+  const slackToken = process.env["SLACK_APP_TOKEN"];
   const shellyUrl = process.env["SHELLY_URL"];
   const shellyDeviceId = process.env["DEVICE_ID"];
   const shellyKey = process.env["SHELLY_KEY"];
+  const slackChannel = "#testkanal";
 
   const statusUrl = `${shellyUrl}/device/status?id=${shellyDeviceId}&auth_key=${shellyKey}`;
   const status = await (await fetch(statusUrl)).json();
 
-  const isOn = status?.data?.device_status?.relays[0]?.ison;
-  const power = status?.data?.device_status?.meters[0]?.power;
+  const deviceStatus = status?.data?.device_status;
+  const isOn = deviceStatus?.relays[0]?.ison;
+  const power = deviceStatus?.meters[0]?.power;
+  const totalEnergy = deviceStatus?.meters[0]?.total;
+  
+  // Calculate hours with 1 decimal place
+  const hours = (totalEnergy / 270 / 60).toFixed(1);
+  
+  console.log('Fridge status:', 
+    {
+      isOn,
+      power,
+      totalEnergy,
+      hours
+    }
+  );
 
-  if (status?.data.online) return `Ölkylen är ${isOn ? `PÅ och drar ${power}W` : "av"}`
-  else return  "Ölkylen är inte kopplad"
+  if (isOn && hours > 12) {
+    const messageBlocks = [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `Kylen har varit på i ungefär ${hours} timmar. Stäng av?`
+        }
+      },
+      {
+        type: "actions",
+        elements: [
+          {
+            type: "button",
+            text: {
+              type: "plain_text",
+              text: "Stäng av",
+              emoji: true
+            },
+            style: "danger",
+            value: "av",
+            action_id: "av"
+          },
+          {
+            type: "button",
+            text: {
+              type: "plain_text",
+              text: "Ignorera",
+              emoji: true
+            },
+            style: "primary",
+            value: "ignore",
+            action_id: "ignore"
+          }
+        ]
+      }
+    ];
+
+    const slackClient = new WebClient(slackToken);
+    await slackClient.chat.postMessage({
+      channel: slackChannel,
+      blocks: messageBlocks,
+      text: `Kylen har varit på i ungefär ${hours} timmar. Stäng av?` // Fallback text
+    });
+  } else {
+    console.log(`The fridge has been OFF`);
+  }
+
+  return { body: { message: "Fridge status checked and Slack message sent if necessary." } };
 }
 
-// IMPORTANT: Makes the function available as a module in the project.
-// This is required for any functions that require external dependencies.
-module.exports.main = main;
+// Convert from ES Module export to CommonJS
+module.exports = { main, formatDuration };
