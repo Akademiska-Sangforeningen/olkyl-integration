@@ -3,14 +3,19 @@ packages:
     actions:
       - name: getStatus
         limits:
-          timeout: 5000
+          timeout: 10000
           memory: 256
-      - name: delayedResponse
+      - name: checkFridgeStatus
         limits:
-          timeout: 5000
+          timeout: 10000
+          memory: 256
+      - name: handleFridgeAction
+        limits:
+          timeout: 20000
           memory: 256
 environment:
   SLACK_TOKEN: ${SLACK_TOKEN}
   SHELLY_URL: ${SHELLY_URL}
   DEVICE_ID: ${DEVICE_ID}
   SHELLY_KEY: ${SHELLY_KEY}
+  SLACK_APP_TOKEN: ${SLACK_APP_TOKEN}
