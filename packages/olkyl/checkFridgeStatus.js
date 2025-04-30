@@ -22,7 +22,7 @@ async function main(args) {
   const shellyUrl = process.env["SHELLY_URL"];
   const shellyDeviceId = process.env["DEVICE_ID"];
   const shellyKey = process.env["SHELLY_KEY"];
-  const slackChannel = "#testkanal";
+  const slackChannel = process.env["SLACK_CHANNEL"] | "#testkanal";
 
   const statusUrl = `${shellyUrl}/device/status?id=${shellyDeviceId}&auth_key=${shellyKey}`;
   const status = await (await fetch(statusUrl)).json();
