@@ -16,14 +16,13 @@ function formatDuration(seconds) {
   return parts.join(' and ') || 'less than a minute';
 }
 
+const slackToken = process.env["SLACK_APP_TOKEN"];
+const shellyUrl = process.env["SHELLY_URL"];
+const shellyDeviceId = process.env["DEVICE_ID"];
+const shellyKey = process.env["SHELLY_KEY"];
+const slackChannel = process.env["SLACK_CHANNEL"] || "#testkanal";
 
 async function main(args) {
-  const slackToken = process.env["SLACK_APP_TOKEN"];
-  const shellyUrl = process.env["SHELLY_URL"];
-  const shellyDeviceId = process.env["DEVICE_ID"];
-  const shellyKey = process.env["SHELLY_KEY"];
-  const slackChannel = process.env["SLACK_CHANNEL"] | "#testkanal";
-
   const statusUrl = `${shellyUrl}/device/status?id=${shellyDeviceId}&auth_key=${shellyKey}`;
   const status = await (await fetch(statusUrl)).json();
 

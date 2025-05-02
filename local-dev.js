@@ -99,6 +99,7 @@ app.get('/test/status', (req, res) => {
 });
 
 // Schedule cron job to run checkFridgeStatus at 12 AM and 12 PM each day
+console.log('Cron job scheduled: Checking fridge status at 10 AM and 10 PM daily');
 cron.schedule('0 10,22 * * *', async () => {
   try {
     console.log('Running scheduled fridge status check...');
@@ -120,5 +121,4 @@ app.listen(PORT, () => {
   console.log(`- Status: http://localhost:${PORT}/test/status`);
   console.log(`- Action: http://localhost:${PORT}/test/action?action=on|off`);
   console.log('Use ngrok or similar to expose this to the internet for Slack');
-  console.log('Cron job scheduled: Checking fridge status at 12 AM and 12 PM daily');
 });
