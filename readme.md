@@ -65,6 +65,7 @@ This will give you a public URL (like https://abc123.ngrok.io) that can receive 
 5. Save your changes
 
 You can also use this webhook URL for interactive components:
+
 1. Go to "Interactivity & Shortcuts" in your Slack app settings
 2. Enable interactivity
 3. Set the Request URL to `https://your-ngrok-url/handleFridgeAction`
@@ -77,17 +78,20 @@ You can also use this webhook URL for interactive components:
 You can test the functions without Slack using your browser:
 
 1. Check fridge status:
+
 ```
 http://localhost:3000/test/status
 ```
 
 2. Control the fridge:
+
 ```
 http://localhost:3000/test/action?action=on   # Turn on the fridge
 http://localhost:3000/test/action?action=off  # Turn off the fridge
 ```
 
 3. Simulate a button press from Slack:
+
 ```
 http://localhost:3000/test/button?action=på   # "Turn on" button
 http://localhost:3000/test/button?action=av   # "Turn off" button
@@ -105,14 +109,18 @@ http://localhost:3000/test/button?action=av   # "Turn off" button
 This project includes two main functions:
 
 ### getStatus
+
 The getStatus function handles:
+
 - Checking the current status of the beer fridge
 - Displaying status with an interactive button interface
 - Processing button clicks from the interactive messages
 - Directly controlling the fridge when given "på" or "av" as parameters
 
 ### handleFridgeAction
+
 The handleFridgeAction function handles:
+
 - Turning the fridge on or off
 - Checking the fridge status after the action
 - Providing clear feedback about the operation's success or failure

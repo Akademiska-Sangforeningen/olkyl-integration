@@ -1,6 +1,9 @@
 const { WebClient } = require('@slack/web-api');
 const fetch = require('node-fetch');
 const dotenv = require('dotenv');
+const fs = require('fs');
+const path = require('path');
+const { setOff, getHoursTimeOn, getHoursSinceReminder, setReminderTime } = require('./helpers');
 
 // Load environment variables from .env file
 dotenv.config();
@@ -32,24 +35,32 @@ async function main(args) {
   const totalEnergy = deviceStatus?.meters[0]?.total;
   
   // Calculate hours with 1 decimal place
-  const hours = (totalEnergy / 270 / 60).toFixed(1);
+  const hours = getHoursTimeOn();
+  const hoursSinceReminder = getHoursSinceReminder();
   
   console.log('Fridge status:', 
     {
       isOn,
       power,
       totalEnergy,
-      hours
+      hours, hoursSinceReminder
     }
   );
+  
+  if (!isOn) {
+    setOff();
+    console.log(`The fridge has been OFF`);
+    return;
+  }
 
-  if (isOn && hours > 12) {
+
+  if (isOn && hours >= 12 && hoursSinceReminder >= 8) {
     const messageBlocks = [
       {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: `Kylen har varit på i ungefär ${hours} timmar. Stäng av?`
+          text: `Kylen har varit på i ungefär ${hours.toFixed(2)} timmar. Stäng av?`
         }
       },
       {
@@ -76,11 +87,11 @@ async function main(args) {
       blocks: messageBlocks,
       text: `Kylen har varit på i ungefär ${hours} timmar. Stäng av?` // Fallback text
     });
-  } else {
-    console.log(`The fridge has been OFF`);
-  }
+    setReminderTime();
+    console.log("Reminder sent to Slack");
+  } 
 
-  return { body: { message: "Fridge status checked and Slack message sent if necessary." } };
+  return;
 }
 
 // Convert from ES Module export to CommonJS

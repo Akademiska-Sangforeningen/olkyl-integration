@@ -1,5 +1,5 @@
-// The function's dependencies.
-const fetch = require("node-fetch");
+const fetch = require('node-fetch');
+const dotenv = require('dotenv');
 
 // Function starts here.
 async function main(args) {
@@ -74,4 +74,4 @@ const getStatusText = async () => {
 
 // IMPORTANT: Makes the function available as a module in the project.
 // This is required for any functions that require external dependencies.
-module.exports.main = main;
+module.exports = { main, getStatusText };

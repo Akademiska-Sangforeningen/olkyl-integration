@@ -1,14 +1,14 @@
 // The function's dependencies
 const fetch = require("node-fetch");
-const { WebClient } = require('@slack/web-api');
-
+const { WebClient } = require("@slack/web-api");
+const { text } = require("body-parser");
 
 // Function starts here - converted to async/await
 async function main(args, res) {
   console.log("handleFridgeAction function called with args:");
 
   let payload;
-  if (typeof args.payload === 'string') {
+  if (typeof args.payload === "string") {
     try {
       payload = JSON.parse(args.payload);
       console.log("Successfully parsed JSON payload");
@@ -19,24 +19,24 @@ async function main(args, res) {
   } else {
     payload = args.payload || args;
   }
-  // console.log(payload);
-  // console.log(payload.actions);
-  
+
   // Configuration
   const token = process.env["SLACK_APP_TOKEN"];
   const shellyUrl = process.env["SHELLY_URL"];
   const shellyDeviceId = process.env["DEVICE_ID"];
   const shellyKey = process.env["SHELLY_KEY"];
   const slackClient = new WebClient(token);
-  
+  const slackChannel = process.env["SLACK_CHANNEL"] || "#testkanal";
+
   console.log("Environment variables loaded");
 
   let action = payload.actions ? payload.actions[0].value : payload.text;
   console.log("Action requested:", action);
-  console.log("channel_id: ", payload.channel_id)
+  console.log("channel_id: ", payload.channel_id);
 
-  channelId = payload.channel_id || payload.container.channel_id
-  
+  channelId =
+    payload.channel_id || payload.container.channel_id || slackChannel;
+
   // Standardize action format
   if (action === "på" || action === "on") {
     action = "on";
@@ -45,31 +45,28 @@ async function main(args, res) {
   } else {
     // Default to status check if no valid action
     console.log("No valid action provided, defaulting to status check");
-    return await getStatus(res, slackClient, channelId, shellyUrl, shellyDeviceId, shellyKey);
+    return await getStatus(
+      res,
+      slackClient,
+      channelId,
+      shellyUrl,
+      shellyDeviceId,
+      shellyKey,
+      action === "debug"
+    );
   }
+
+  res.status(200).send();
 
   try {
     // Check if this is an interactive message with a response_url
     const responseUrl = payload.response_url;
-    
+
     if (responseUrl) {
-      res.status(200).send()
+      const blocksWithoutActions = payload.message.blocks.filter(
+        (block) => block.type !== "actions"
+      );
 
-      console.log('Interactive click, sending new buttons')
-
-      // This is a button click from an interactive message
-      // Update the original message to show action in progress
-      const updatedBlocks = [
-        {
-          "type": "section",
-          "text": {
-            "type": "mrkdwn",
-            "text": action === "on" ? "Sätter på ölkylen..." : "Stänger av ölkylen..."
-          }
-        }
-      ];
-      
-      // Send the update to the original message
       await fetch(responseUrl, {
         method: 'POST',
         headers: {
@@ -77,49 +74,79 @@ async function main(args, res) {
         },
         body: JSON.stringify({
           replace_original: true,
-          blocks: updatedBlocks,
-          text: action === "on" ? "Sätter på ölkylen..." : "Stänger av ölkylen..."
+          blocks: blocksWithoutActions,
         })
       });
       
-      console.log("Updated original message with loading state");
-    } else {
-      // Send immediate response for slash commands
-      res.status(200).json({
-        text: action === "on" ? "Lägger på ölkylen..." : "Stänger av ölkylen...",
-        response_type: "in_channel",
-      });
-    }
-    
+      console.log("Removed button");
+    } 
+
+    const updatedBlocks = [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text:
+            action === "on"
+              ? "Sätter på ölkylen..."
+              : "Stänger av ölkylen...",
+        },
+      },
+    ];
+
+    const updatingMessage = await slackClient.chat.postMessage({
+      channel: channelId,
+      blocks: updatedBlocks,
+      text:  action === "on" ? "Lägger på ölkylen..." : "Stänger av ölkylen...",
+    });
+
     console.log("Sent initial notification to Slack");
-    
+
     // Control the fridge
-    let result = await controlFridge(shellyUrl, shellyDeviceId, shellyKey, action);
+    let result = await controlFridge(
+      shellyUrl,
+      shellyDeviceId,
+      shellyKey,
+      action
+    );
     console.log("Control fridge result:", result);
-    
+
+    shouldBeOn = action === "on";
+    let status = null;
+
     if (result.isok) {
       // Wait for the device to update
       console.log("Device control successful, waiting for device to update");
-      await new Promise(resolve => setTimeout(resolve, 10000));
+      let retries = 0;
+      let hasStatusUpdated = false;
+      while (!hasStatusUpdated && retries < 15) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        status = await getFridgeStatus(shellyUrl, shellyDeviceId, shellyKey);
+        hasStatusUpdated =
+          status?.data?.device_status?.relays[0]?.ison === shouldBeOn &&
+          (status?.data?.device_status?.meters[0]?.power > 0 || !shouldBeOn);
+        retries++;
+        console.log(
+          "Fridge status:",
+          status?.data?.device_status?.relays[0]?.ison,
+          "waiting 1000ms",
+          hasStatusUpdated
+        );
+      }
     } else {
       throw new Error(`Failed to control device: ${result}`);
     }
-    
-    // Get updated status
-    console.log("Getting updated fridge status");
-    const status = await getFridgeStatus(shellyUrl, shellyDeviceId, shellyKey);
-    // console.log("Fridge status:", status);
-    
+
     const isOn = status?.data?.device_status?.relays[0]?.ison;
     const power = status?.data?.device_status?.meters[0]?.power;
-    
+
     console.log("Fridge is on:", isOn, "Power:", power);
-    
+
     // If this was a button click with a response_url, update the message again
     if (responseUrl) {
-      let finalText = '';
+      let finalText = "";
       let finalBlocks = [];
-      
+
       if (action === "on" && !isOn) {
         // Failed to turn on
         finalText = "Kunde inte sätta på ölkylen, den är fortfarande avstängd.";
@@ -133,47 +160,42 @@ async function main(args, res) {
         // Successfully turned off
         finalText = "Ölkylen är nu avstängd! ☠️";
       }
-      
+
       // Create updated blocks with the opposite action button
       finalBlocks = [
         {
-          "type": "section",
-          "text": {
-            "type": "mrkdwn",
-            "text": finalText
-          }
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: finalText,
+          },
         },
         {
-          "type": "actions",
-          "elements": [
+          type: "actions",
+          elements: [
             {
-              "type": "button",
-              "text": {
-                "type": "plain_text",
-                "text": isOn ? "Stäng av" : "Lägg på",
-                "emoji": true
+              type: "button",
+              text: {
+                type: "plain_text",
+                text: isOn ? "Stäng av" : "Lägg på",
+                emoji: true,
               },
-              "style": isOn ? "danger" : "primary",
-              "value": isOn ? "off" : "on",
-              "action_id": isOn ? "off" : "on"
-            }
-          ]
-        }
-      ];
-      
-      // Update the message
-      await fetch(responseUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
+              style: isOn ? "danger" : "primary",
+              value: isOn ? "off" : "on",
+              action_id: isOn ? "off" : "on",
+            },
+          ],
         },
-        body: JSON.stringify({
-          replace_original: true,
-          blocks: finalBlocks,
-          text: finalText
-        })
+      ];
+
+      // Update the message
+      await slackClient.chat.update({
+        channel: updatingMessage.channel,
+        ts: updatingMessage.ts,
+        blocks: finalBlocks,
+        text: finalText,
       });
-      
+
       console.log("Updated original message with final state");
     } else {
       // For non-interactive messages, send a new message
@@ -182,122 +204,139 @@ async function main(args, res) {
         console.log("Failed to turn on fridge");
         await slackClient.chat.postMessage({
           channel: channelId,
-          text: "Kunde inte sätta på ölkylen, den är fortfarande avstängd."
+          text: "Kunde inte sätta på ölkylen, den är fortfarande avstängd.",
         });
       } else if (action === "off" && isOn) {
         // Failed to turn off
         console.log("Failed to turn off fridge");
         await slackClient.chat.postMessage({
           channel: channelId,
-          text: "Kunde inte stänga av ölkylen, den är fortfarande på."
+          text: "Kunde inte stänga av ölkylen, den är fortfarande på.",
         });
       } else if (isOn) {
         // Successfully turned on
         console.log("Successfully turned on fridge");
         await slackClient.chat.postMessage({
           channel: channelId,
-          text: `Ölkylen är nu påslagen och drar ${power}W! 🍺`
+          text: `Ölkylen är nu påslagen och drar ${power}W! 🍺`,
         });
       } else {
         // Successfully turned off
         console.log("Successfully turned off fridge");
         await slackClient.chat.postMessage({
           channel: channelId,
-          text: "Ölkylen är nu avstängd! ☠️"
+          text: "Ölkylen är nu avstängd! ☠️",
         });
       }
     }
-    
+
     console.log("Operation completed successfully");
     return { body: {} };
   } catch (error) {
     console.error("Error:", error);
-    
+
     // Send error message if we have a channel ID
     if (channelId) {
       try {
         await slackClient.chat.postMessage({
           channel: channelId,
-          text: `Ett fel uppstod: ${error.message}`
+          text: `Ett fel uppstod: ${error.message}`,
         });
         console.log("Error notification sent to Slack");
       } catch (slackError) {
         console.error("Failed to send error to Slack:", slackError);
       }
     }
-    
+
     console.log("Returning empty response after error");
     return { body: {} };
   }
 }
 
-async function getStatus(res, slackClient, channelId, shellyUrl, deviceId, authKey) {
+async function getStatus(
+  res,
+  slackClient,
+  channelId,
+  shellyUrl,
+  deviceId,
+  authKey,
+  debug = false
+) {
   console.log("getStatus called for channel:", channelId);
-  
+
   try {
     // Get current status
     const status = await getFridgeStatus(shellyUrl, deviceId, authKey);
     console.log("Status received:", status);
-    
+
     const isOn = status?.data?.device_status?.relays[0]?.ison;
     const power = status?.data?.device_status?.meters[0]?.power;
-    
+    const totalEnergy = status?.data?.device_status?.meters[0]?.total;
+  
+    const hours = (totalEnergy / 270 / 60).toFixed(1);
+  
+
     // Create status message
     let statusText = "Kunde inte hämta status för ölkylen";
     if (status?.data?.online) {
-      statusText = `Ölkylen är ${isOn ? `PÅ och drar ${power}W` : "avstängd"}`;
+      statusText = `Ölkylen ${isOn ? `har varit på i ungefär ${hours} timmar och drar ${power}W` : "är avstängd"}`;
     }
-    
+
+    if (debug) {
+      statusText += `\nDebug info: ${JSON.stringify(status, null, 2)}`;
+    }
+
     console.log("Status text:", statusText);
-    
+
     // Create blocks with appropriate action button
     const blocks = [
       {
-        "type": "section",
-        "text": {
-          "type": "mrkdwn",
-          "text": statusText
-        }
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: statusText,
+        },
       },
       {
-        "type": "actions",
-        "elements": [
+        type: "actions",
+        elements: [
           {
-            "type": "button",
-            "text": {
-              "type": "plain_text",
-              "text": isOn ? "Stäng av" : "Lägg på",
-              "emoji": true
+            type: "button",
+            text: {
+              type: "plain_text",
+              text: isOn ? "Stäng av" : "Lägg på",
+              emoji: true,
             },
-            "style": isOn ? "danger" : "primary",
-            "value": isOn ? "off" : "on",
-            "action_id": isOn ? "off" : "on"
-          }
-        ]
-      }
+            style: isOn ? "danger" : "primary",
+            value: isOn ? "off" : "on",
+            action_id: isOn ? "off" : "on",
+          },
+        ],
+      },
     ];
-    
+
     // Send message with status and action button
     console.log("Sending status message to Slack with blocks");
     res.json({
       channel: channelId,
       text: statusText,
-      blocks: blocks
+      blocks: blocks,
+      response_type: "in_channel",
     });
     console.log("Status message sent successfully");
   } catch (error) {
     console.error("Error getting status:", error);
-    
+
     try {
       await slackClient.chat.postMessage({
         channel: channelId,
-        text: `Fel vid hämtning av status: ${error.message}`
+        text: `Fel vid hämtning av status: ${error.message}`,
       });
       console.log("Error notification sent to user");
     } catch (slackError) {
       console.error("Failed to send error message to Slack:", slackError);
     }
-    
+
     return { body: {} };
   }
 }
@@ -328,7 +367,7 @@ async function controlFridge(shellyUrl, deviceId, authKey, action) {
     },
     body: formBody,
   });
-  
+
   console.log(`Control API response status: ${response.status}`);
   return await response.json();
 }
@@ -336,7 +375,7 @@ async function controlFridge(shellyUrl, deviceId, authKey, action) {
 async function getFridgeStatus(shellyUrl, deviceId, authKey) {
   const statusUrl = `${shellyUrl}/device/status?id=${deviceId}&auth_key=${authKey}`;
   console.log(`Getting fridge status from: ${statusUrl}`);
-  
+
   const response = await fetch(statusUrl);
   console.log(`Status API response status: ${response.status}`);
   return await response.json();

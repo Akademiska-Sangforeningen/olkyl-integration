@@ -91,16 +91,14 @@ app.post('/handleFridgeAction', verifySlackRequest, (req, res) => {
 });
 
 // For testing purposes - bypass verification
-app.get('/test/status', (req, res) => {
+app.get('/test/status', async (req, res) => {
   console.log('Testing status endpoint');
-  main({ command: '/olkyl', text: '', response_url: '' }, res)
-    .then(result => console.log('Test completed:', result))
-    .catch(error => console.error('Test error:', error));
+  res.send(await checkFridgeStatus());
 });
 
-// Schedule cron job to run checkFridgeStatus at 12 AM and 12 PM each day
-console.log('Cron job scheduled: Checking fridge status at 10 AM and 10 PM daily');
-cron.schedule('0 10,22 * * *', async () => {
+cronSchedule = '0 * * * *'; // Every hour
+console.log('Cron job scheduled: Checking fridge status with schedule: ', cronSchedule);
+cron.schedule(cronSchedule, async () => {
   try {
     console.log('Running scheduled fridge status check...');
     
