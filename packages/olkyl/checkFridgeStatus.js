@@ -54,7 +54,7 @@ async function main(args) {
   }
 
 
-  if (isOn && hours >= 12 && hoursSinceReminder >= 8) {
+  if (isOn && hours >= 12 && hoursSinceReminder >= 20) {
     const messageBlocks = [
       {
         type: "section",
