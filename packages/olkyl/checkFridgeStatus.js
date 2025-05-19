@@ -1,8 +1,6 @@
 const { WebClient } = require('@slack/web-api');
 const fetch = require('node-fetch');
 const dotenv = require('dotenv');
-const fs = require('fs');
-const path = require('path');
 const { setOff, getHoursTimeOn, getHoursSinceReminder, setReminderTime } = require('./helpers');
 
 // Load environment variables from .env file

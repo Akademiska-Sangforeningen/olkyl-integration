@@ -15,11 +15,17 @@ function setOff() {
  * If file does not exist, returns null
  */
 function getHoursTimeOn() {
-  const latestOffPath = path.join(__dirname, 'latestOff.json');
-  if (!fs.existsSync(latestOffPath)) return null;
-  const data = JSON.parse(fs.readFileSync(latestOffPath, 'utf8'));
-  if (!data.latestOff) return null;
-  return Math.floor((Date.now() - data.latestOff) / 1000) / 3600;
+  try {
+    const latestOffPath = path.join(__dirname, 'latestOff.json');
+    const data = JSON.parse(fs.readFileSync(latestOffPath, 'utf8'));
+    if (!data.latestOff) throw new Error('latestOff not found in latestOff.json');
+    return Math.floor((Date.now() - data.latestOff) / 1000) / 3600;
+  }
+  catch (error) {
+    console.error('Error reading latestOff.json:', error.message);
+    setOff();
+    return null;
+  }
 }
 
 /**
@@ -36,11 +42,16 @@ function setReminderTime() {
  * If file does not exist, returns null
  */
 function getHoursSinceReminder() {
-  const reminderPath = path.join(__dirname, 'reminderTime.json');
-  if (!fs.existsSync(reminderPath)) return null;
-  const data = JSON.parse(fs.readFileSync(reminderPath, 'utf8'));
-  if (!data.reminder) return null;
-  return Math.floor((Date.now() - data.reminder) / 1000) / 3600;
+  try {
+    const reminderPath = path.join(__dirname, 'reminderTime.json');
+    const data = JSON.parse(fs.readFileSync(reminderPath, 'utf8'));
+    if (!data.reminder) throw new Error('reminder not found in reminderTime.json');
+    return Math.floor((Date.now() - data.reminder) / 1000) / 3600;
+  } catch (error) {
+    console.error('Error reading reminder time:', error.message);
+    setReminderTime();
+    return null;
+  }
 }
 
 module.exports = {

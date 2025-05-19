@@ -8,4 +8,4 @@ node_modules
 package-lock.json
 /ssl
 certificate.pem
-pagkages/olkyl/*.json
+packages/olkyl/*.json
