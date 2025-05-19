@@ -4,10 +4,10 @@ const path = require('path');
 /**
  * Writes the current timestamp to latestOff.json
  */
-function setOff() {
+function setOff(latestEnergy = 0) {
   const latestOffPath = path.join(__dirname, 'latestOff.json');
   const timestamp = Date.now();
-  fs.writeFileSync(latestOffPath, JSON.stringify({ latestOff: timestamp }, null, 2));
+  fs.writeFileSync(latestOffPath, JSON.stringify({ latestOff: timestamp, energy: latestEnergy }, null, 2));
 }
 
 /**
@@ -19,7 +19,9 @@ function getHoursTimeOn() {
     const latestOffPath = path.join(__dirname, 'latestOff.json');
     const data = JSON.parse(fs.readFileSync(latestOffPath, 'utf8'));
     if (!data.latestOff) throw new Error('latestOff not found in latestOff.json');
-    return Math.floor((Date.now() - data.latestOff) / 1000) / 3600;
+    timeOn = Math.floor((Date.now() - data.latestOff) / 1000) / 3600;
+    latestEnergy = data.energy || 0;
+    return { timeOn, latestEnergy };
   }
   catch (error) {
     console.error('Error reading latestOff.json:', error.message);
