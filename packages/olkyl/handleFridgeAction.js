@@ -63,23 +63,24 @@ async function main(args, res) {
     const responseUrl = payload.response_url;
 
     if (responseUrl) {
-      const blocksWithoutActions = payload.message.blocks.filter(
+      //Payload.message only exists on button clicks
+      const blocksWithoutActions = payload.message?.blocks.filter(
         (block) => block.type !== "actions"
       );
 
       await fetch(responseUrl, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json'
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           replace_original: true,
           blocks: blocksWithoutActions,
-        })
+        }),
       });
-      
+
       console.log("Removed button");
-    } 
+    }
 
     const updatedBlocks = [
       {
@@ -87,9 +88,7 @@ async function main(args, res) {
         text: {
           type: "mrkdwn",
           text:
-            action === "on"
-              ? "Sätter på ölkylen..."
-              : "Stänger av ölkylen...",
+            action === "on" ? "Sätter på ölkylen..." : "Stänger av ölkylen...",
         },
       },
     ];
@@ -97,7 +96,7 @@ async function main(args, res) {
     const updatingMessage = await slackClient.chat.postMessage({
       channel: channelId,
       blocks: updatedBlocks,
-      text:  action === "on" ? "Lägger på ölkylen..." : "Stänger av ölkylen...",
+      text: action === "on" ? "Lägger på ölkylen..." : "Stänger av ölkylen...",
     });
 
     console.log("Sent initial notification to Slack");
@@ -146,6 +145,7 @@ async function main(args, res) {
     if (responseUrl) {
       let finalText = "";
       let finalBlocks = [];
+      const userId = payload.user_id;
 
       if (action === "on" && !isOn) {
         // Failed to turn on
@@ -155,10 +155,13 @@ async function main(args, res) {
         finalText = "Kunde inte stänga av ölkylen, den är fortfarande på.";
       } else if (isOn) {
         // Successfully turned on
-        finalText = `Ölkylen är nu påslagen och drar ${power}W! 🍺`;
+        if (userId)
+          finalText = `🍺 <@${userId}> lade på ölkylen och den och drar ${power}W! 🍺`;
+        else finalText = `Ölkylen är nu påslagen och drar ${power}W! 🍺`;
       } else {
         // Successfully turned off
-        finalText = "Ölkylen är nu avstängd! ☠️";
+        if (userId) finalText = `<@${userId}> stängde av ölkylen ☠️`;
+        else finalText = "Ölkylen är nu avstängd! ☠️";
       }
 
       // Create updated blocks with the opposite action button
@@ -272,14 +275,17 @@ async function getStatus(
     const isOn = status?.data?.device_status?.relays[0]?.ison;
     const power = status?.data?.device_status?.meters[0]?.power;
     const totalEnergy = status?.data?.device_status?.meters[0]?.total;
-  
+
     const hours = (totalEnergy / 270 / 60).toFixed(1);
-  
 
     // Create status message
     let statusText = "Kunde inte hämta status för ölkylen";
     if (status?.data?.online) {
-      statusText = `Ölkylen ${isOn ? `har varit på i ungefär ${hours} timmar och drar ${power}W` : "är avstängd"}`;
+      statusText = `Ölkylen ${
+        isOn
+          ? `har varit på i ungefär ${hours} timmar och drar ${power}W`
+          : "är avstängd"
+      }`;
     }
 
     if (debug) {
