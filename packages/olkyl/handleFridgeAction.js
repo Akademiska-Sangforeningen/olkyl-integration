@@ -195,11 +195,18 @@ async function main(args, res) {
           ],
         },
       ];
+      // Delete the temporary "turning on/off" message and post a fresh one
+      try {
+        await slackClient.chat.delete({
+          channel: updatingMessage.channel,
+          ts: updatingMessage.ts,
+        });
+      } catch (e) {
+        console.error("Failed to delete interim message:", e);
+      }
 
-      // Update the message
-      await slackClient.chat.update({
+      await slackClient.chat.postMessage({
         channel: updatingMessage.channel,
-        ts: updatingMessage.ts,
         blocks: finalBlocks,
         text: finalText,
       });
