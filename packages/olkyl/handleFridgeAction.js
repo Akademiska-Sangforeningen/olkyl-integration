@@ -147,6 +147,11 @@ async function main(args, res) {
       let finalBlocks = [];
       const userId = payload.user_id;
 
+      if (!userId) {
+        console.error("User ID is missing");
+        console.log("Payload:", payload);
+      }
+
       if (action === "on" && !isOn) {
         // Failed to turn on
         finalText = "Kunde inte sätta på ölkylen, den är fortfarande avstängd.";

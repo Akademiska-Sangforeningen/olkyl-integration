@@ -107,7 +107,7 @@ app.get("/test/status", async (req, res) => {
   res.send(await checkFridgeStatus());
 });
 
-cronSchedule = "*/20 * * * * *"; // Every hour
+cronSchedule = "0 * * * *"; // Every hour
 console.log(
   "Cron job scheduled: Checking fridge status with schedule: ",
   cronSchedule
