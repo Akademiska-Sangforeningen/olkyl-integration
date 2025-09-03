@@ -145,7 +145,7 @@ async function main(args, res) {
     if (responseUrl) {
       let finalText = "";
       let finalBlocks = [];
-      const userId = payload.user_id;
+      const userId = payload.user_id || payload.user.id;
 
       if (!userId) {
         console.error("User ID is missing");
