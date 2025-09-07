@@ -2,6 +2,11 @@
 const fetch = require("node-fetch");
 const { WebClient } = require("@slack/web-api");
 const { text } = require("body-parser");
+const {
+  setAutoOffInDays,
+  getAutoOffTimestamp,
+  clearAutoOff,
+} = require("./helpers");
 
 // Function starts here - converted to async/await
 async function main(args, res) {
@@ -30,14 +35,33 @@ async function main(args, res) {
 
   console.log("Environment variables loaded");
 
-  let action = payload.actions ? payload.actions[0].value : payload.text;
+  // Support button clicks and select menu
+  let action = payload.actions
+    ? payload.actions[0].type === "static_select"
+      ? payload.actions[0].selected_option?.value
+      : payload.actions[0].value
+    : payload.text;
   console.log("Action requested:", action);
-  console.log("channel_id: ", payload.channel_id);
 
   channelId =
     payload.channel_id || payload.container.channel_id || slackChannel;
 
-  // Standardize action format
+  console.log("channel_id: ", channelId);
+
+  // Special handling for setting auto-off timer via dropdown (values like "auto_off_1".."auto_off_7")
+  if (typeof action === "string" && action.startsWith("auto_off_")) {
+    const days = parseFloat(action.replace("auto_off_", ""), 10);
+    const autoOffAt = setAutoOffInDays(days);
+    res.status(200).send();
+    const when = new Date(autoOffAt).toLocaleString("sv-SE");
+    await slackClient.chat.postMessage({
+      channel: channelId,
+      text: `Kylen stängs av automatiskt om ${days} dygn (${when}).`,
+    });
+    return { body: {} };
+  }
+
+  // Standardize action format for on/off
   if (action === "på" || action === "on") {
     action = "on";
   } else if (action === "av" || action === "off") {
@@ -170,6 +194,8 @@ async function main(args, res) {
       }
 
       // Create updated blocks with the opposite action button
+      const autoOffAt = getAutoOffTimestamp();
+      const hasAuto = Boolean(autoOffAt);
       finalBlocks = [
         {
           type: "section",
@@ -192,6 +218,28 @@ async function main(args, res) {
               value: isOn ? "off" : "on",
               action_id: isOn ? "off" : "on",
             },
+            // Only show dropdown when fridge is ON
+            ...(isOn
+              ? [
+                  {
+                    type: "static_select",
+                    placeholder: {
+                      type: "plain_text",
+                      text: "Stäng av automatiskt om...",
+                      emoji: true,
+                    },
+                    action_id: "auto_off_select",
+                    options: [0.5, 1, 2, 3, 4, 5, 6, 7].map((d) => ({
+                      text: {
+                        type: "plain_text",
+                        text: `${d} dygn`,
+                        emoji: true,
+                      },
+                      value: `auto_off_${d}`,
+                    })),
+                  },
+                ]
+              : []),
           ],
         },
       ];
@@ -231,13 +279,62 @@ async function main(args, res) {
       } else if (isOn) {
         // Successfully turned on
         console.log("Successfully turned on fridge");
+        const autoOffAt = getAutoOffTimestamp();
+        const hasAuto = Boolean(autoOffAt);
+        const when = hasAuto
+          ? new Date(autoOffAt).toLocaleString("sv-SE")
+          : null;
         await slackClient.chat.postMessage({
           channel: channelId,
+          blocks: [
+            {
+              type: "section",
+              text: {
+                type: "mrkdwn",
+                text: `Ölkylen är nu påslagen och drar ${power}W! 🍺${
+                  hasAuto ? `\nAuto-av: ${when}` : ""
+                }`,
+              },
+            },
+            {
+              type: "actions",
+              elements: [
+                {
+                  type: "button",
+                  text: { type: "plain_text", text: "Stäng av", emoji: true },
+                  style: "danger",
+                  value: "off",
+                  action_id: "off",
+                },
+                {
+                  type: "static_select",
+                  placeholder: {
+                    type: "plain_text",
+                    text: hasAuto ? "Ändra auto-av" : "Auto-av om...",
+                    emoji: true,
+                  },
+                  action_id: "auto_off_select",
+                  options: [1, 2, 3, 4, 5, 6, 7].map((d) => ({
+                    text: {
+                      type: "plain_text",
+                      text: `${d} dygn`,
+                      emoji: true,
+                    },
+                    value: `auto_off_${d}`,
+                  })),
+                },
+              ],
+            },
+          ],
           text: `Ölkylen är nu påslagen och drar ${power}W! 🍺`,
         });
       } else {
         // Successfully turned off
         console.log("Successfully turned off fridge");
+        // Clear any auto-off timer on manual off
+        try {
+          clearAutoOff();
+        } catch {}
         await slackClient.chat.postMessage({
           channel: channelId,
           text: "Ölkylen är nu avstängd! ☠️",
@@ -307,12 +404,16 @@ async function getStatus(
     console.log("Status text:", statusText);
 
     // Create blocks with appropriate action button
+    const autoOffAt = getAutoOffTimestamp();
+    const hasAuto = Boolean(autoOffAt);
+    const when = hasAuto ? new Date(autoOffAt).toLocaleString("sv-SE") : null;
     const blocks = [
       {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: statusText,
+          text:
+            hasAuto && isOn ? `${statusText}\nAuto-av: ${when}` : statusText,
         },
       },
       {
@@ -329,6 +430,27 @@ async function getStatus(
             value: isOn ? "off" : "on",
             action_id: isOn ? "off" : "on",
           },
+          ...(isOn
+            ? [
+                {
+                  type: "static_select",
+                  placeholder: {
+                    type: "plain_text",
+                    text: hasAuto ? "Ändra auto-av" : "Auto-av om...",
+                    emoji: true,
+                  },
+                  action_id: "auto_off_select",
+                  options: [1, 2, 3, 4, 5, 6, 7].map((d) => ({
+                    text: {
+                      type: "plain_text",
+                      text: `${d} dygn`,
+                      emoji: true,
+                    },
+                    value: `auto_off_${d}`,
+                  })),
+                },
+              ]
+            : []),
         ],
       },
     ];

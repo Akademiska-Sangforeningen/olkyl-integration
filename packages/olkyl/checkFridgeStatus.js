@@ -6,6 +6,8 @@ const {
   getHoursTimeOn,
   getHoursSinceReminder,
   setReminderTime,
+  getAutoOffTimestamp,
+  clearAutoOff,
 } = require("./helpers");
 
 // Load environment variables from .env file
@@ -36,6 +38,7 @@ async function main(args) {
   const isOn = deviceStatus?.relays[0]?.ison;
   const power = deviceStatus?.meters[0]?.power;
   const totalEnergy = deviceStatus?.meters[0]?.total;
+  const autoOffAt = getAutoOffTimestamp();
 
   // Calculate hours with 1 decimal place
   const { timeOn: hours, latestEnergy } = getHoursTimeOn();
@@ -50,15 +53,55 @@ async function main(args) {
     newEnergy,
     hours,
     hoursSinceReminder,
+    autoOffAt,
   });
 
   if (!isOn) {
     setOff(totalEnergy);
+    // Clear any auto-off timer if fridge is already off
+    if (autoOffAt) clearAutoOff();
     console.log(`The fridge has been OFF`);
     return;
   }
 
-  if (isOn && hours >= 18 && hoursSinceReminder >= 18) {
+  // Auto-off due?
+  if (isOn && autoOffAt && Date.now() >= autoOffAt) {
+    try {
+      const controlUrl = `${shellyUrl}/device/relay/control`;
+      const details = {
+        channel: 0,
+        turn: "off",
+        id: shellyDeviceId,
+        auth_key: shellyKey,
+      };
+      const formBody = Object.entries(details)
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+        .join("&");
+      const result = await (
+        await fetch(controlUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+          },
+          body: formBody,
+        })
+      ).json();
+      if (result.isok) {
+        clearAutoOff();
+        const slackClient = new WebClient(slackToken);
+        await slackClient.chat.postMessage({
+          channel: slackChannel,
+          text: "Auto-avstängning: Ölkylen stängdes av enligt timer.",
+        });
+        return;
+      }
+    } catch (e) {
+      console.error("Failed auto-off:", e);
+    }
+  }
+
+  // Reminder only if no auto-off timer is set
+  if (isOn && !autoOffAt && hours >= 18 && hoursSinceReminder >= 18) {
     const messageBlocks = [
       {
         type: "section",
@@ -82,6 +125,19 @@ async function main(args) {
             style: "danger",
             value: "av",
             action_id: "av",
+          },
+          {
+            type: "static_select",
+            placeholder: {
+              type: "plain_text",
+              text: "Stäng av automatiskt om...",
+              emoji: true,
+            },
+            action_id: "auto_off_select",
+            options: [1, 2, 3, 4, 5, 6, 7].map((d) => ({
+              text: { type: "plain_text", text: `${d} dygn`, emoji: true },
+              value: `auto_off_${d}`,
+            })),
           },
         ],
       },
